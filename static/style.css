@@ -1,0 +1,212 @@
+/* Wavelength — mobile-first (portrait iPhone) styles. */
+:root {
+  --bg: #0f1226;
+  --bg2: #171a35;
+  --card: #1e2244;
+  --card2: #262b53;
+  --text: #eef0ff;
+  --muted: #9aa0cc;
+  --accent: #6c7bff;
+  --accent2: #00d4b8;
+  --danger: #ff5a78;
+  --good: #2ecc71;
+  --ok: #f6c945;
+  --miss: #ff5a78;
+  --radius: 16px;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: radial-gradient(1200px 600px at 50% -10%, #20264f 0%, var(--bg) 55%);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+#app {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 16px 14px 96px;
+}
+
+.screen { animation: fade 0.25s ease; }
+@keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.hidden { display: none !important; }
+.center { text-align: center; }
+.muted { color: var(--muted); }
+
+h1 { font-size: 30px; margin: 6px 0; letter-spacing: 0.5px; }
+h2 { font-size: 20px; margin: 0 0 10px; }
+.tag { color: var(--muted); margin: 0 0 8px; }
+.hint { color: var(--muted); font-size: 14px; line-height: 1.4; margin: 8px 0 0; }
+
+.hero { text-align: center; padding: 18px 0 8px; }
+
+.card {
+  background: linear-gradient(180deg, var(--card) 0%, var(--card2) 100%);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin: 0 0 14px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+}
+
+label {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  margin: 6px 0 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+input[type="text"] {
+  width: 100%;
+  font-size: 17px; /* >=16px stops iOS auto-zoom */
+  padding: 14px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: #11142e;
+  color: var(--text);
+  margin-bottom: 10px;
+}
+input:focus { outline: none; border-color: var(--accent); }
+.code-input { text-transform: uppercase; letter-spacing: 6px; font-weight: 700; text-align: center; }
+
+button {
+  width: 100%;
+  font-size: 17px;
+  font-weight: 700;
+  padding: 16px;
+  border: none;
+  border-radius: 14px;
+  cursor: pointer;
+  margin: 4px 0;
+  color: #fff;
+  transition: transform 0.06s ease, opacity 0.2s ease;
+}
+button:active { transform: scale(0.98); }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+.primary { background: linear-gradient(180deg, var(--accent) 0%, #5563e0 100%); }
+.secondary { background: #2c3160; border: 1px solid rgba(255,255,255,0.12); }
+
+.divider { display: flex; align-items: center; gap: 10px; color: var(--muted); margin: 14px 0; font-size: 13px; }
+.divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: rgba(255,255,255,0.12); }
+
+/* Banner */
+.banner {
+  position: fixed; top: 0; left: 0; right: 0;
+  text-align: center; padding: 10px; font-size: 14px; z-index: 50;
+  background: var(--accent); color: #fff;
+}
+.banner.error { background: var(--danger); }
+
+/* Room code */
+.roomcode { text-align: center; }
+.roomcode .label { display: block; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+.big-code { font-size: 46px; font-weight: 800; letter-spacing: 10px; color: var(--accent2); }
+
+.pill { background: var(--accent); border-radius: 20px; padding: 2px 10px; font-size: 14px; margin-left: 6px; }
+
+/* Player list */
+.players { list-style: none; padding: 0; margin: 0; }
+.players li { display: flex; align-items: center; gap: 10px; padding: 10px 6px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.players li:last-child { border-bottom: none; }
+.pname { font-weight: 600; flex: 1; }
+.dot { width: 10px; height: 10px; border-radius: 50%; }
+.dot.on { background: var(--good); box-shadow: 0 0 8px var(--good); }
+.dot.off { background: #555; }
+.tag-host { background: var(--accent2); color: #042; font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 700; }
+.tag-you { background: rgba(255,255,255,0.14); font-size: 11px; padding: 2px 8px; border-radius: 10px; }
+
+/* Author forms */
+.spectrum-form { display: flex; align-items: center; gap: 8px; padding: 12px; }
+.spectrum-form input { margin-bottom: 0; }
+.spectrum-form .snum { color: var(--muted); font-weight: 700; font-size: 13px; }
+.spectrum-form .vs { color: var(--accent2); font-size: 22px; }
+
+/* Spinner */
+.spinner {
+  width: 44px; height: 44px; margin: 14px auto;
+  border: 4px solid rgba(255,255,255,0.15);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.big-progress { font-size: 28px; font-weight: 800; color: var(--accent2); }
+
+/* Roles */
+.role-badge { display: inline-block; padding: 6px 12px; border-radius: 20px; font-weight: 700; font-size: 14px; margin-bottom: 6px; }
+.role-badge.giver { background: linear-gradient(90deg, var(--accent), var(--accent2)); color: #06122a; }
+.role-badge.guesser { background: rgba(255,255,255,0.1); }
+
+.clue-box { display: flex; flex-direction: column; gap: 2px; margin: 10px 0 0; padding: 12px; background: #11142e; border-radius: 12px; }
+.clue-box .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+.clue-text { font-size: 22px; font-weight: 800; }
+.clue-text.big { font-size: 26px; margin: 10px 0; }
+
+/* Dial */
+.dial-wrap { margin: 10px 0 14px; }
+.dial { width: 100%; height: auto; display: block; user-select: none; }
+.dial.interactive { cursor: pointer; }
+
+.dial-face { fill: #11142e; stroke: rgba(255,255,255,0.06); }
+.dial-rim { fill: none; stroke: rgba(255,255,255,0.25); stroke-width: 3; }
+.dial-ticks line { stroke: rgba(255,255,255,0.18); stroke-width: 2; }
+
+.band-2 { fill: rgba(108,123,255,0.30); }
+.band-3 { fill: rgba(0,212,184,0.40); }
+.band-4 { fill: rgba(46,204,113,0.65); }
+.dial-target-line { stroke: #fff; stroke-width: 2; stroke-dasharray: 4 3; }
+
+.dial-needle { stroke: var(--accent2); stroke-width: 4; stroke-linecap: round; }
+.dial-knob { fill: #fff; stroke: var(--accent2); stroke-width: 3; }
+
+.guess-marker line { stroke-width: 3; stroke: var(--muted); opacity: 0.8; }
+.guess-marker circle { fill: var(--muted); }
+.guess-marker.good line, .guess-marker.good circle { stroke: var(--good); fill: var(--good); }
+.guess-marker.ok line, .guess-marker.ok circle { stroke: var(--ok); fill: var(--ok); }
+.guess-marker.miss line, .guess-marker.miss circle { stroke: var(--miss); fill: var(--miss); }
+.marker-label { fill: var(--text); font-size: 12px; font-weight: 700; }
+
+/* Spectrum labels under the dial are drawn by JS? No — show via labels row */
+
+/* Reveal */
+.reveal-clue { font-size: 16px; }
+.reveal-clue .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-right: 6px; }
+.scorelist { list-style: none; padding: 0; margin: 0; }
+.scorelist li { display: flex; justify-content: space-between; padding: 10px 4px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.scorelist li:last-child { border-bottom: none; }
+.scorelist .giver-row { color: var(--accent2); font-weight: 700; }
+.scorelist em { color: var(--muted); font-style: normal; font-size: 12px; }
+
+/* Final leaderboard */
+.leaderboard { list-style: none; padding: 0; margin: 0; counter-reset: rank; }
+.leaderboard li { display: flex; align-items: center; gap: 12px; padding: 14px 8px; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 18px; }
+.leaderboard li.winner { background: linear-gradient(90deg, rgba(0,212,184,0.15), transparent); border-radius: 10px; }
+.leaderboard .rank { font-size: 22px; width: 32px; text-align: center; }
+.leaderboard .fname { flex: 1; font-weight: 600; }
+.leaderboard b { font-size: 20px; color: var(--accent2); }
+
+/* Mini board */
+.mini-board {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  display: flex; gap: 12px; flex-wrap: wrap; justify-content: center;
+  padding: 8px 12px; font-size: 13px;
+  background: rgba(15,18,38,0.94);
+  border-top: 1px solid rgba(255,255,255,0.08);
+  backdrop-filter: blur(8px);
+  z-index: 40;
+}
+.mini-board b { color: var(--accent2); }
+.mini-board .mb-label { color: var(--muted); }
+
+/* Spectrum end labels overlaid on dial */
+.dial-labels { display: flex; justify-content: space-between; font-weight: 700; font-size: 15px; margin-top: -6px; padding: 0 4px; }
+.dial-labels .l { color: var(--accent); }
+.dial-labels .r { color: var(--accent2); }

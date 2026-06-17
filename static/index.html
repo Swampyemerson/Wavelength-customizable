@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>Wavelength</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div id="app">
+
+    <!-- Connection banner -->
+    <div id="banner" class="banner hidden"></div>
+
+    <!-- JOIN -->
+    <section id="screen-join" class="screen">
+      <div class="hero">
+        <h1>〰️ Wavelength</h1>
+        <p class="tag">Write your own spectrums. Read each other's minds.</p>
+      </div>
+      <div class="card">
+        <label>Your name</label>
+        <input id="join-name" type="text" maxlength="16" placeholder="e.g. Alex" autocomplete="off">
+        <button id="btn-create" class="primary">Create a room</button>
+        <div class="divider"><span>or join one</span></div>
+        <label>Room code</label>
+        <input id="join-code" type="text" maxlength="4" placeholder="ABCD"
+               autocapitalize="characters" autocomplete="off" class="code-input">
+        <button id="btn-join" class="secondary">Join room</button>
+      </div>
+    </section>
+
+    <!-- LOBBY -->
+    <section id="screen-lobby" class="screen hidden">
+      <div class="card">
+        <div class="roomcode">
+          <span class="label">Room code</span>
+          <span id="lobby-code" class="big-code">––––</span>
+        </div>
+        <p class="hint">Players join at this site and enter the code above.</p>
+      </div>
+      <div class="card">
+        <h2>Players <span id="lobby-count" class="pill">0</span></h2>
+        <ul id="lobby-players" class="players"></ul>
+      </div>
+      <div id="lobby-host" class="card hidden">
+        <button id="btn-start" class="primary">Start game</button>
+        <p id="lobby-start-hint" class="hint"></p>
+      </div>
+      <p id="lobby-wait" class="hint center hidden">Waiting for the host to start…</p>
+    </section>
+
+    <!-- AUTHOR -->
+    <section id="screen-author" class="screen hidden">
+      <div class="card">
+        <h2>Write your spectrums</h2>
+        <p class="hint">Create <b id="author-n">3</b> opposing pairs. No one sees the
+          target while writing — that's the point. Be creative & a little ambiguous!</p>
+      </div>
+      <div id="author-forms"></div>
+      <button id="btn-submit-spectrums" class="primary">Submit spectrums</button>
+      <p class="hint center">Examples: Underrated ↔ Overrated · Useless ↔ Useful · Cold ↔ Hot</p>
+    </section>
+
+    <!-- WAITING (author done) -->
+    <section id="screen-waiting" class="screen hidden">
+      <div class="card center">
+        <div class="spinner"></div>
+        <h2>Spectrums locked in ✓</h2>
+        <p class="hint">Waiting for everyone to finish writing…</p>
+        <p class="big-progress"><span id="author-progress">0 / 0</span></p>
+      </div>
+    </section>
+
+    <!-- ROUND: CLUE-GIVER -->
+    <section id="screen-clue" class="screen hidden">
+      <div class="card">
+        <span class="role-badge giver">You're the clue-giver</span>
+        <p class="hint">Only you can see the target. Give a clue that lands the
+          others' guesses right on it.</p>
+      </div>
+      <div class="dial-wrap" id="clue-dial"></div>
+      <div class="dial-labels" id="clue-labels"></div>
+      <div class="card">
+        <label>Your clue</label>
+        <input id="clue-input" type="text" maxlength="80" placeholder="One word or phrase…">
+        <button id="btn-submit-clue" class="primary">Give clue</button>
+      </div>
+    </section>
+
+    <!-- ROUND: GUESSER -->
+    <section id="screen-guess" class="screen hidden">
+      <div class="card">
+        <span class="role-badge guesser"><b id="guess-giver"></b> is the clue-giver</span>
+        <div id="guess-clue-box" class="clue-box hidden">
+          <span class="label">Clue</span>
+          <span id="guess-clue" class="clue-text"></span>
+        </div>
+        <p id="guess-wait-clue" class="hint">Waiting for the clue…</p>
+      </div>
+      <div class="dial-wrap" id="guess-dial"></div>
+      <div class="dial-labels" id="guess-labels"></div>
+      <button id="btn-submit-guess" class="primary" disabled>Lock in guess</button>
+      <p id="guess-locked-hint" class="hint center hidden">Locked! Waiting for others…
+        <span id="guess-progress"></span></p>
+    </section>
+
+    <!-- CLUE-GIVER waiting for guesses -->
+    <section id="screen-clue-wait" class="screen hidden">
+      <div class="card center">
+        <span class="role-badge giver">Your clue is out</span>
+        <p id="clue-wait-text" class="clue-text big"></p>
+        <div class="spinner"></div>
+        <p class="hint">Waiting for guesses… <span id="clue-wait-progress"></span></p>
+      </div>
+      <div class="dial-wrap" id="cluewait-dial"></div>
+      <div class="dial-labels" id="cluewait-labels"></div>
+    </section>
+
+    <!-- REVEAL -->
+    <section id="screen-reveal" class="screen hidden">
+      <div class="card">
+        <h2>Reveal</h2>
+        <p class="reveal-clue"><span class="label">Clue</span>
+          <b id="reveal-clue"></b> <span class="muted">— by <span id="reveal-giver"></span></span></p>
+      </div>
+      <div class="dial-wrap" id="reveal-dial"></div>
+      <div class="dial-labels" id="reveal-labels"></div>
+      <div class="card">
+        <ul id="reveal-scores" class="scorelist"></ul>
+      </div>
+      <button id="btn-next" class="primary hidden">Next round →</button>
+      <p id="reveal-wait" class="hint center">Waiting for the host to continue…</p>
+    </section>
+
+    <!-- FINAL -->
+    <section id="screen-final" class="screen hidden">
+      <div class="card center">
+        <h1>🏆 Final scores</h1>
+      </div>
+      <div class="card">
+        <ol id="final-board" class="leaderboard"></ol>
+      </div>
+      <button id="btn-again" class="primary hidden">Play again</button>
+    </section>
+
+    <!-- Persistent leaderboard strip during play -->
+    <div id="mini-board" class="mini-board hidden"></div>
+
+  </div>
+
+  <script src="/static/dial.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
