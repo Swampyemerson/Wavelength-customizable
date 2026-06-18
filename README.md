@@ -9,13 +9,22 @@ drawing from prewritten packs. The host runs a server on their computer; everyon
 
 1. **Lobby** — players join with a name and the 4-letter room code (≥2 players,
    3+ recommended).
-2. **Author** — each player privately writes 3 spectrums (e.g. `Cold ↔ Hot`).
-   Nobody sees a target while writing — that's the fairness rule.
-3. **Rounds** — a clue-giver rotates through players. The server picks one of the
-   pooled spectrums (never one the clue-giver wrote) and a hidden target on the dial.
-   The clue-giver sees the target and gives a clue; everyone else drags the dial to
-   guess. On reveal, scores update.
-4. **Final leaderboard** when the spectrum pool is exhausted (or the host ends it).
+2. **Write spectrums** — each player privately writes 3 spectrums (e.g.
+   `Cold ↔ Hot`). Nobody sees a target while writing — that's the fairness rule.
+3. **Write clues (all at once)** — the server pools everyone's spectrums and
+   assigns each player a set to clue (never their own), each with a hidden target.
+   On one page, every player writes *all* of their clues up front — they see each
+   target and write a clue to land the others on it.
+4. **Rounds** — the game rotates through the pre-written clues, alternating which
+   player's clue is in play. Each round shows the spectrum + that pre-written clue;
+   everyone else drags the dial to guess. On reveal, scores update. Because the
+   clues already exist, rounds fly by — nobody waits on a clue-giver mid-round.
+5. **Final leaderboard** when every clue has been played (or the host ends it).
+
+> Why clues up front? So players aren't sitting idle while a clue-giver thinks.
+> Everyone does their writing during the two authoring phases, then the guessing
+> rounds just alternate quickly. The fairness rule still holds: spectrum authors
+> never see a target, and the clue-giver (who does) is never the author.
 
 ### Scoring
 
@@ -55,11 +64,13 @@ Then open the app:
 
 ### Anti-cheat
 
-The target is never sent to guessers before the reveal — it lives server-side and
-only the clue-giver's socket receives it. The server is authoritative for the
-current phase, whose turn it is, who has guessed, and all scoring. Disconnect /
-rejoin-by-name is handled; if the clue-giver drops mid-round the round is skipped
-and its spectrum returned to the pool.
+The target is never sent to guessers before the reveal — it lives server-side and,
+during the clueing phase, only the assigned clue-giver's socket receives the
+targets for their own assignments. The server is authoritative for the current
+phase, whose turn it is, who has guessed, and all scoring. Disconnect /
+rejoin-by-name is handled: a clue-giver dropping no longer abandons a round (the
+clue is already written), and if someone drops during an authoring phase the game
+proceeds without blocking — any spectrums left unclued are simply skipped.
 
 ## Files
 

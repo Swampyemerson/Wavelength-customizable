@@ -4,6 +4,13 @@ Wavelength (custom) — local-network real-time multiplayer party game.
 One FastAPI server, one port. Authoritative game state lives here, in memory.
 Players (including the host) connect from their browsers over WebSockets.
 
+Flow:
+    lobby -> author (write spectrums) -> clueing (write ALL your clues at once)
+          -> playing (rotate through pre-written clues; others guess) -> ended
+
+Writing clues up front means nobody waits on a clue-giver mid-round — the
+guessing rounds just reveal each pre-written clue and rotate quickly.
+
 Run:
     pip install -r requirements.txt
     python server.py            # or: uvicorn server:app --host 0.0.0.0 --port 8000
@@ -13,7 +20,6 @@ Then everyone opens http://<HOST-LAN-IP>:8000 on their phones.
 
 from __future__ import annotations
 
-import asyncio
 import os
 import random
 import string
@@ -59,31 +65,44 @@ class Spectrum:
     id: int
     left: str
     right: str
-    author: str           # player name
-    used: bool = False
+    author: str                      # who wrote the spectrum
+    giver: Optional[str] = None      # who was assigned to clue it (never the author)
+    target: Optional[int] = None     # hidden target, generated at assignment time
+    clue: Optional[str] = None       # pre-written by the giver in the clueing phase
 
 
 @dataclass
 class Round:
-    clue_giver: str
     spectrum: Spectrum
-    target: int
-    clue: Optional[str] = None
-    guesses: dict = field(default_factory=dict)   # name -> value (0..100)
-    sub_phase: str = "clue"                        # clue | guess | reveal
+    sub_phase: str = "guess"                        # guess | reveal
+    guesses: dict = field(default_factory=dict)    # name -> value (0..100)
     points: dict = field(default_factory=dict)     # name -> points (set at reveal)
     clue_giver_points: float = 0.0
+
+    @property
+    def clue_giver(self) -> str:
+        return self.spectrum.giver
+
+    @property
+    def target(self) -> int:
+        return self.spectrum.target
+
+    @property
+    def clue(self) -> Optional[str]:
+        return self.spectrum.clue
 
 
 @dataclass
 class Room:
     code: str
     host: str
-    phase: str = "lobby"          # lobby | author | playing | ended
+    phase: str = "lobby"          # lobby | author | clueing | playing | ended
     players: dict = field(default_factory=dict)    # name -> Player
     order: list = field(default_factory=list)      # join order (rotation)
     pool: list = field(default_factory=list)       # list[Spectrum]
-    rotation_ptr: int = 0
+    givers: list = field(default_factory=list)     # players with clue assignments
+    play_order: list = field(default_factory=list)  # spectrum ids, in play sequence
+    play_index: int = -1
     current: Optional[Round] = None
     spectrum_seq: int = 0
     connections: dict = field(default_factory=dict)  # name -> WebSocket
@@ -96,8 +115,18 @@ class Room:
         self.spectrum_seq += 1
         return self.spectrum_seq
 
-    def pool_remaining(self) -> int:
-        return sum(1 for s in self.pool if not s.used)
+    def spectrum_by_id(self, sid: int) -> Optional[Spectrum]:
+        for s in self.pool:
+            if s.id == sid:
+                return s
+        return None
+
+    def assigned_to(self, name: str) -> list[Spectrum]:
+        return [s for s in self.pool if s.giver == name]
+
+    def rounds_remaining(self) -> int:
+        """Rounds not yet started (excludes the current one)."""
+        return max(0, len(self.play_order) - (self.play_index + 1))
 
 
 rooms: dict[str, Room] = {}
@@ -111,11 +140,20 @@ def generate_code() -> str:
 
 
 # ---------------------------------------------------------------------------
-# Round / scoring logic (server authoritative)
+# Phase transitions & assignment (server authoritative)
 # ---------------------------------------------------------------------------
-def build_pool(room: Room) -> None:
+def assign_clues(room: Room) -> None:
+    """Build the spectrum pool, assign each one a clue-giver who is NOT its
+    author (balanced so everyone clues the same number), and pick hidden
+    targets. Runs once when the author phase completes."""
+    authors = [
+        n for n in room.order
+        if room.players[n].connected
+        and len(room.players[n].spectrums) >= SPECTRUMS_PER_PLAYER
+    ]
+
     pool: list[Spectrum] = []
-    for name in room.order:
+    for name in authors:
         for sp in room.players[name].spectrums:
             pool.append(
                 Spectrum(
@@ -126,49 +164,117 @@ def build_pool(room: Room) -> None:
                 )
             )
     random.shuffle(pool)
+
+    # Balanced assignment: each giver clues exactly k spectrums, never their own.
+    # (|pool| == k * len(authors), so this is always feasible for >= 2 authors.)
+    k = SPECTRUMS_PER_PLAYER
+    cap = {n: k for n in authors}
+    assignment: dict[int, str] = {}
+
+    def backtrack(i: int) -> bool:
+        if i == len(pool):
+            return True
+        s = pool[i]
+        # Prefer the least-loaded eligible giver to keep things balanced; this
+        # heuristic means we essentially never actually backtrack.
+        cands = [n for n in authors if n != s.author and cap[n] > 0]
+        random.shuffle(cands)
+        cands.sort(key=lambda n: cap[n])
+        for g in cands:
+            cap[g] -= 1
+            assignment[s.id] = g
+            if backtrack(i + 1):
+                return True
+            cap[g] += 1
+            del assignment[s.id]
+        return False
+
+    backtrack(0)
+    for s in pool:
+        s.giver = assignment.get(s.id)
+        s.target = random.randint(TARGET_MIN, TARGET_MAX)
+
     room.pool = pool
+    room.givers = [n for n in authors if any(s.giver == n for s in pool)]
+
+
+def check_author_complete(room: Room) -> bool:
+    """Move author -> clueing once every connected player has submitted
+    their spectrums (and there are enough of them)."""
+    if room.phase != "author":
+        return False
+    connected = room.connected_players()
+    if len(connected) < MIN_PLAYERS:
+        return False
+    if not all(
+        len(room.players[n].spectrums) >= SPECTRUMS_PER_PLAYER for n in connected
+    ):
+        return False
+    assign_clues(room)
+    room.phase = "clueing"
+    return True
+
+
+def player_clues_done(room: Room, name: str) -> bool:
+    mine = room.assigned_to(name)
+    return bool(mine) and all(s.clue for s in mine)
+
+
+def build_play_order(room: Room) -> None:
+    """Interleave clued spectrums by giver so consecutive rounds rotate
+    through different players. Unclued spectrums (giver never wrote a clue)
+    are dropped."""
+    by_giver: dict[str, list[Spectrum]] = {}
+    for s in room.pool:
+        if s.clue:
+            by_giver.setdefault(s.giver, []).append(s)
+    for lst in by_giver.values():
+        random.shuffle(lst)
+
+    givers = [g for g in room.order if g in by_giver]
+    order: list[int] = []
+    while any(by_giver[g] for g in givers):
+        for g in givers:
+            if by_giver[g]:
+                order.append(by_giver[g].pop().id)
+    room.play_order = order
+    room.play_index = -1
+
+
+def check_clueing_complete(room: Room) -> bool:
+    """Move clueing -> playing once every connected giver has written all
+    of their clues."""
+    if room.phase != "clueing":
+        return False
+    for name in room.givers:
+        if room.players[name].connected and not player_clues_done(room, name):
+            return False
+    build_play_order(room)
+    if not room.play_order:
+        room.phase = "ended"
+        room.current = None
+        return True
+    room.phase = "playing"
+    start_next_round(room)
+    return True
 
 
 def start_next_round(room: Room) -> None:
-    """Advance to the next round, or end the game if no valid pairing remains."""
-    remaining = [s for s in room.pool if not s.used]
-    if not remaining:
-        room.phase = "ended"
-        room.current = None
-        return
-
-    order = room.order
-    n = len(order)
-    chosen_giver = None
-    chosen_spectrum = None
-
-    # Try each player starting at the rotation pointer; pick the first connected
-    # player who has at least one eligible (not self-authored) spectrum left.
-    for k in range(n):
-        idx = (room.rotation_ptr + k) % n
-        name = order[idx]
-        if not room.players[name].connected:
-            continue
-        eligible = [s for s in remaining if s.author != name]
-        if eligible:
-            chosen_giver = name
-            chosen_spectrum = random.choice(eligible)
-            room.rotation_ptr = (idx + 1) % n
-            break
-
-    if chosen_giver is None or chosen_spectrum is None:
-        # No connected player can be paired with a remaining spectrum.
-        room.phase = "ended"
-        room.current = None
-        return
-
-    chosen_spectrum.used = True
-    room.current = Round(
-        clue_giver=chosen_giver,
-        spectrum=chosen_spectrum,
-        target=random.randint(TARGET_MIN, TARGET_MAX),
-        sub_phase="clue",
-    )
+    """Advance to the next playable spectrum, or end the game."""
+    room.play_index += 1
+    while room.play_index < len(room.play_order):
+        s = room.spectrum_by_id(room.play_order[room.play_index])
+        # A round is playable as long as someone other than the giver is
+        # connected to guess (the giver itself may be offline — the clue is
+        # already written).
+        if s is not None and any(
+            n != s.giver for n in room.connected_players()
+        ):
+            room.current = Round(spectrum=s, sub_phase="guess")
+            return
+        room.play_index += 1
+    room.phase = "ended"
+    room.current = None
 
 
 def required_guessers(room: Room) -> list[str]:
@@ -200,11 +306,12 @@ def do_reveal(room: Room) -> None:
     # Clue-giver scores the average of their guessers' points.
     avg = sum(guesser_points) / len(guesser_points) if guesser_points else 0.0
     r.clue_giver_points = avg
-    room.players[r.clue_giver].score += avg
+    if r.clue_giver in room.players:
+        room.players[r.clue_giver].score += avg
 
 
 # ---------------------------------------------------------------------------
-# Per-player state views (anti-cheat: target hidden until reveal)
+# Per-player state views (anti-cheat: target hidden from guessers until reveal)
 # ---------------------------------------------------------------------------
 def player_list(room: Room) -> list[dict]:
     out = []
@@ -217,6 +324,8 @@ def player_list(room: Room) -> list[dict]:
             "isHost": name == room.host,
             "submitted": len(p.spectrums) >= SPECTRUMS_PER_PLAYER,
         }
+        if room.phase == "clueing":
+            entry["cluesDone"] = player_clues_done(room, name)
         if room.phase == "playing" and room.current is not None:
             r = room.current
             entry["isClueGiver"] = name == r.clue_giver
@@ -236,13 +345,13 @@ def view_for(room: Room, viewer: str) -> dict:
         "minPlayers": MIN_PLAYERS,
         "spectrumsPerPlayer": SPECTRUMS_PER_PLAYER,
         "players": player_list(room),
-        "poolRemaining": room.pool_remaining(),
+        "poolRemaining": room.rounds_remaining(),
     }
 
     if room.phase == "author":
-        total = len(room.order)
+        total = len(room.connected_players())
         done = sum(
-            1 for n in room.order
+            1 for n in room.connected_players()
             if len(room.players[n].spectrums) >= SPECTRUMS_PER_PLAYER
         )
         state["authorSubmitted"] = (
@@ -250,6 +359,20 @@ def view_for(room: Room, viewer: str) -> dict:
         )
         state["authorDone"] = done
         state["authorTotal"] = total
+
+    if room.phase == "clueing":
+        # Each giver sees only their own assignments — including the target,
+        # because they must see it to write a clue. Nobody sees anyone else's.
+        mine = room.assigned_to(viewer)
+        state["clueing"] = {
+            "assignments": [
+                {"id": s.id, "left": s.left, "right": s.right, "target": s.target}
+                for s in mine
+            ],
+            "submitted": player_clues_done(room, viewer),
+            "done": sum(1 for n in room.givers if player_clues_done(room, n)),
+            "total": len(room.givers),
+        }
 
     if room.phase == "playing" and room.current is not None:
         r = room.current
@@ -260,15 +383,13 @@ def view_for(room: Room, viewer: str) -> dict:
             "clueGiver": r.clue_giver,
             "youAreClueGiver": is_giver,
             "spectrum": {"left": r.spectrum.left, "right": r.spectrum.right},
+            "clue": r.clue,                       # pre-written, safe to show all
             "guessedCount": sum(1 for n in needed if n in r.guesses),
             "guesserTotal": len(needed),
             "yourGuess": r.guesses.get(viewer),
         }
-        # Clue is visible to the clue-giver always, and to guessers once given.
-        if r.sub_phase in ("guess", "reveal") or is_giver:
-            round_view["clue"] = r.clue
         # Target: only the clue-giver sees it before reveal; everyone at reveal.
-        if r.sub_phase == "reveal" or (is_giver and r.sub_phase in ("clue", "guess")):
+        if r.sub_phase == "reveal" or is_giver:
             round_view["target"] = r.target
         if r.sub_phase == "reveal":
             round_view["guesses"] = [
@@ -428,29 +549,21 @@ async def handle_action(room: Room, name: str, action: str, msg: dict, ws: WebSo
                 ws, f"Please fill in all {SPECTRUMS_PER_PLAYER} spectrums (both ends)."
             )
         player.spectrums = cleaned[:SPECTRUMS_PER_PLAYER]
-        # If everyone has submitted, build the pool and begin.
-        if all(
-            len(room.players[n].spectrums) >= SPECTRUMS_PER_PLAYER
-            for n in room.connected_players()
-        ) and len(room.connected_players()) >= MIN_PLAYERS:
-            build_pool(room)
-            room.phase = "playing"
-            room.rotation_ptr = 0
-            start_next_round(room)
+        check_author_complete(room)
         await broadcast(room)
 
-    elif action == "submit_clue":
-        if room.phase != "playing" or room.current is None:
+    elif action == "submit_clues":
+        if room.phase != "clueing":
             return
-        r = room.current
-        if r.sub_phase != "clue" or name != r.clue_giver:
-            return
-        clue = (msg.get("clue") or "").strip()
-        if not clue:
-            return await send_error(ws, "Please enter a clue.")
-        r.clue = clue
-        r.sub_phase = "guess"
-        maybe_reveal(room)  # handles the (unlikely) case of zero guessers
+        raw = msg.get("clues") or {}
+        # Accept {spectrum_id: clue_text}; only set clues for our assignments.
+        mine = room.assigned_to(name)
+        provided = {str(k): (v or "").strip() for k, v in raw.items()}
+        if any(not provided.get(str(s.id)) for s in mine):
+            return await send_error(ws, "Please write a clue for every spectrum.")
+        for s in mine:
+            s.clue = provided[str(s.id)]
+        check_clueing_complete(room)
         await broadcast(room)
 
     elif action == "submit_guess":
@@ -486,13 +599,15 @@ async def handle_action(room: Room, name: str, action: str, msg: dict, ws: WebSo
     elif action == "play_again":
         if name != room.host or room.phase != "ended":
             return
-        # Reset to lobby, keep players, drop scores and authored spectrums.
-        for p in room.players.values():
-            p.score = 0.0
-            p.spectrums = []
+        # Reset to lobby, keep players, drop scores / spectrums / assignments.
+        for pl in room.players.values():
+            pl.score = 0.0
+            pl.spectrums = []
         room.pool = []
+        room.givers = []
+        room.play_order = []
+        room.play_index = -1
         room.current = None
-        room.rotation_ptr = 0
         room.spectrum_seq = 0
         room.phase = "lobby"
         await broadcast(room)
@@ -513,7 +628,6 @@ async def handle_disconnect(room: Room, name: str, ws: WebSocket):
         room.players.pop(name, None)
         if name in room.order:
             room.order.remove(name)
-        # Reassign host if the host left.
         if name == room.host and room.order:
             room.host = room.order[0]
         if not room.order:
@@ -522,18 +636,15 @@ async def handle_disconnect(room: Room, name: str, ws: WebSocket):
         await broadcast(room)
         return
 
-    # Mid-game: if the clue-giver drops, abandon the round and return its
-    # spectrum to the pool, then draw the next round.
-    if (
-        room.phase == "playing"
-        and room.current is not None
-        and room.current.clue_giver == name
-        and room.current.sub_phase in ("clue", "guess")
-    ):
-        room.current.spectrum.used = False
-        start_next_round(room)
+    # A disconnect can unblock a phase transition (e.g. we were waiting on the
+    # player who just left) or a reveal (they were the last guesser).
+    if room.phase == "author":
+        check_author_complete(room)
+    elif room.phase == "clueing":
+        check_clueing_complete(room)
     elif room.phase == "playing" and room.current is not None:
-        # A guesser dropped — they may have been the one we were waiting on.
+        # Clues are pre-written, so a clue-giver dropping does NOT abandon the
+        # round. Only re-check whether the remaining guessers are all in.
         maybe_reveal(room)
 
     await broadcast(room)

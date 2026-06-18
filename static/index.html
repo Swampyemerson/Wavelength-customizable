@@ -62,30 +62,27 @@
       <p class="hint center">Examples: Underrated ↔ Overrated · Useless ↔ Useful · Cold ↔ Hot</p>
     </section>
 
-    <!-- WAITING (author done) -->
+    <!-- WAITING (shared: spectrums done / clues done) -->
     <section id="screen-waiting" class="screen hidden">
       <div class="card center">
         <div class="spinner"></div>
-        <h2>Spectrums locked in ✓</h2>
-        <p class="hint">Waiting for everyone to finish writing…</p>
-        <p class="big-progress"><span id="author-progress">0 / 0</span></p>
+        <h2 id="waiting-title">Locked in ✓</h2>
+        <p id="waiting-text" class="hint">Waiting for everyone to finish…</p>
+        <p class="big-progress"><span id="waiting-progress">0 / 0</span></p>
       </div>
     </section>
 
-    <!-- ROUND: CLUE-GIVER -->
-    <section id="screen-clue" class="screen hidden">
+    <!-- CLUEING: write all of your clues at once -->
+    <section id="screen-clues" class="screen hidden">
       <div class="card">
-        <span class="role-badge giver">You're the clue-giver</span>
-        <p class="hint">Only you can see the target. Give a clue that lands the
-          others' guesses right on it.</p>
+        <h2>Write your clues</h2>
+        <p class="hint">You've been given <b id="clues-count">3</b> spectrums to clue
+          (none of your own). Only you can see each target — write a clue that will
+          land the others' guesses on it. Everyone writes ahead of time, so the
+          rounds fly by.</p>
       </div>
-      <div class="dial-wrap" id="clue-dial"></div>
-      <div class="dial-labels" id="clue-labels"></div>
-      <div class="card">
-        <label>Your clue</label>
-        <input id="clue-input" type="text" maxlength="80" placeholder="One word or phrase…">
-        <button id="btn-submit-clue" class="primary">Give clue</button>
-      </div>
+      <div id="clues-forms"></div>
+      <button id="btn-submit-clues" class="primary">Lock in all clues</button>
     </section>
 
     <!-- ROUND: GUESSER -->

@@ -5,8 +5,8 @@
 
   const $ = (id) => document.getElementById(id);
   const SCREENS = [
-    "join", "lobby", "author", "waiting",
-    "clue", "guess", "clue-wait", "reveal", "final",
+    "join", "lobby", "author", "clues", "waiting",
+    "guess", "clue-wait", "reveal", "final",
   ];
 
   let ws = null;
@@ -70,8 +70,19 @@
 
     if (s.phase === "lobby") { renderLobby(s); show("lobby"); }
     else if (s.phase === "author") {
-      if (s.authorSubmitted) { renderWaiting(s); show("waiting"); }
-      else { ensureAuthorForms(s); show("author"); }
+      if (s.authorSubmitted) {
+        renderWaiting("Spectrums locked in ✓",
+          "Waiting for everyone to finish writing…",
+          `${s.authorDone} / ${s.authorTotal}`);
+        show("waiting");
+      } else { ensureAuthorForms(s); show("author"); }
+    } else if (s.phase === "clueing") {
+      if (s.clueing.submitted) {
+        renderWaiting("Clues locked in ✓",
+          "Waiting for everyone to finish their clues…",
+          `${s.clueing.done} / ${s.clueing.total}`);
+        show("waiting");
+      } else { ensureCluesForms(s); show("clues"); }
     } else if (s.phase === "playing") { renderRound(s, prev); }
     else if (s.phase === "ended") { renderFinal(s); show("final"); }
 
@@ -158,9 +169,53 @@
     send({ action: "submit_spectrums", spectrums });
   };
 
-  function renderWaiting(s) {
-    $("author-progress").textContent = `${s.authorDone} / ${s.authorTotal}`;
+  function renderWaiting(title, text, progress) {
+    $("waiting-title").textContent = title;
+    $("waiting-text").textContent = text;
+    $("waiting-progress").textContent = progress;
   }
+
+  // ---- CLUEING (write all your clues at once) ----------------------------
+  // Keyed by the set of assigned spectrum ids so we rebuild only when the
+  // assignment actually changes (e.g. on play-again), not on every state push.
+  let cluesKey = null;
+  let cluesDials = {};
+  function ensureCluesForms(s) {
+    const a = s.clueing.assignments;
+    $("clues-count").textContent = a.length;
+    const key = a.map((x) => x.id).join(",");
+    if (key === cluesKey) return;
+    cluesKey = key;
+    cluesDials = {};
+    const wrap = $("clues-forms");
+    wrap.innerHTML = "";
+    a.forEach((sp, i) => {
+      const card = document.createElement("div");
+      card.className = "card clue-form";
+      card.innerHTML =
+        `<div class="clue-form-head">#${i + 1}</div>` +
+        `<div class="dial-wrap" id="cluedial-${sp.id}"></div>` +
+        `<div class="dial-labels" id="cluelabels-${sp.id}"></div>` +
+        `<input class="clue-write" data-id="${sp.id}" type="text" maxlength="80" ` +
+        `placeholder="Your clue for the marked target…">`;
+      wrap.appendChild(card);
+      cluesDials[sp.id] = new Dial($("cluedial-" + sp.id), { interactive: false });
+      cluesDials[sp.id].setTarget(sp.target);
+      setLabels("cluelabels-" + sp.id, sp);
+    });
+  }
+  $("btn-submit-clues").onclick = () => {
+    const inputs = document.querySelectorAll(".clue-write");
+    const clues = {};
+    let missing = false;
+    inputs.forEach((inp) => {
+      const v = inp.value.trim();
+      if (!v) missing = true;
+      clues[inp.dataset.id] = v;
+    });
+    if (missing) return showBanner("Write a clue for every spectrum.", true);
+    send({ action: "submit_clues", clues });
+  };
 
   function setLabels(id, spectrum) {
     $(id).innerHTML =
@@ -174,39 +229,16 @@
     if (!r) return;
     const newRound = !prev || !prev.round ||
       prev.round.clueGiver !== r.clueGiver ||
+      prev.round.clue !== r.clue ||
       (prev.phase !== "playing");
 
-    if (r.youAreClueGiver) {
-      if (r.subPhase === "clue") renderClueGiver(s, r, newRound);
-      else if (r.subPhase === "guess") renderClueWait(s, r);
-      else renderReveal(s, r);
-    } else {
-      if (r.subPhase === "clue") renderGuesserWaiting(s, r);
-      else if (r.subPhase === "guess") renderGuesser(s, r, newRound);
-      else renderReveal(s, r);
-    }
+    if (r.subPhase === "reveal") renderReveal(s, r);
+    else if (r.youAreClueGiver) renderClueWait(s, r);  // their clue is pre-written
+    else renderGuesser(s, r, newRound);
     lastSubPhase = r.subPhase;
   }
 
-  // Clue-giver: sees the target, types a clue.
-  function renderClueGiver(s, r, newRound) {
-    show("clue");
-    if (!dials.clue || newRound) {
-      dials.clue = new Dial($("clue-dial"), { interactive: false, value: 50 });
-    }
-    dials.clue.setTarget(r.target);
-    setLabels("clue-labels", r.spectrum);
-    if (newRound) $("clue-input").value = "";
-    $("btn-submit-clue").disabled = false;
-  }
-  $("btn-submit-clue").onclick = () => {
-    const clue = $("clue-input").value.trim();
-    if (!clue) return showBanner("Type a clue first.", true);
-    $("btn-submit-clue").disabled = true;
-    send({ action: "submit_clue", clue });
-  };
-
-  // Clue-giver waiting for guesses.
+  // Clue-giver waiting for guesses (clue was written in the clueing phase).
   function renderClueWait(s, r) {
     show("clue-wait");
     $("clue-wait-text").textContent = `“${r.clue}”`;
@@ -218,26 +250,7 @@
     setLabels("cluewait-labels", r.spectrum);
   }
 
-  // Guesser waiting for the clue.
-  function renderGuesserWaiting(s, r) {
-    show("guess");
-    $("guess-giver").textContent = r.clueGiver;
-    $("guess-clue-box").classList.add("hidden");
-    $("guess-wait-clue").classList.remove("hidden");
-    $("btn-submit-guess").disabled = true;
-    $("guess-locked-hint").classList.add("hidden");
-    if (!dials.guess) {
-      dials.guess = new Dial($("guess-dial"), {
-        interactive: true, value: 50,
-        onChange: () => { guessReady = true; $("btn-submit-guess").disabled = false; },
-      });
-    }
-    dials.guess.setTarget(null);
-    dials.guess.clearMarkers();
-    setLabels("guess-labels", r.spectrum);
-  }
-
-  // Guesser: drags the pointer, locks a guess.
+  // Guesser: drags the pointer, locks a guess. The clue is already shown.
   function renderGuesser(s, r, newRound) {
     show("guess");
     $("guess-giver").textContent = r.clueGiver;
@@ -330,7 +343,11 @@
     });
     $("btn-again").classList.toggle("hidden", !s.isHost);
   }
-  $("btn-again").onclick = () => { authorBuilt = false; send({ action: "play_again" }); };
+  $("btn-again").onclick = () => {
+    authorBuilt = false;
+    cluesKey = null;
+    send({ action: "play_again" });
+  };
 
   // ---- Mini leaderboard --------------------------------------------------
   function renderMiniBoard(s) {
@@ -355,5 +372,4 @@
 
   // Enter-to-submit niceties.
   $("join-code").addEventListener("keydown", (e) => { if (e.key === "Enter") $("btn-join").click(); });
-  $("clue-input").addEventListener("keydown", (e) => { if (e.key === "Enter") $("btn-submit-clue").click(); });
 })();
