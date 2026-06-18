@@ -28,7 +28,7 @@ from fastapi.staticfiles import StaticFiles
 # ---------------------------------------------------------------------------
 # Tunable game constants
 # ---------------------------------------------------------------------------
-MIN_PLAYERS = 3
+MIN_PLAYERS = 2
 SPECTRUMS_PER_PLAYER = 3
 TARGET_MIN = 12          # target center kept off the edges so bands fit
 TARGET_MAX = 88

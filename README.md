@@ -7,7 +7,8 @@ drawing from prewritten packs. The host runs a server on their computer; everyon
 
 ## How it plays
 
-1. **Lobby** — players join with a name and the 4-letter room code (≥3 players).
+1. **Lobby** — players join with a name and the 4-letter room code (≥2 players,
+   3+ recommended).
 2. **Author** — each player privately writes 3 spectrums (e.g. `Cold ↔ Hot`).
    Nobody sees a target while writing — that's the fairness rule.
 3. **Rounds** — a clue-giver rotates through players. The server picks one of the
